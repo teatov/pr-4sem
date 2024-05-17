@@ -1,0 +1,59 @@
+\documentclass{fefu}
+\usepackage{subfiles}
+
+\usepackage{float}
+\usepackage{minted}
+\usepackage{dirtree}
+\usepackage{multirow}
+\usepackage{graphicx}
+
+\graphicspath{ {./images/} }
+
+\renewcommand{\listingscaption}{Код программы}
+
+\author{Титов Анатолий Александрович}
+\setpracticetitle{Обработка больших данных. Распознавание объектов на цифровых изображениях}
+\setfaculty{09.03.03 Прикладная информатика}
+\setprogram{Прикладная информатика в компьютерном дизайне}
+\setgroup{Б9122-09.03.03пикд}
+\setsupervisor{Скурский Степан Андреевич}{ассистент}
+\setschooltitle{ИНСТИТУТ}{}
+\setschool{МАТЕМАТИКИКИ И КОМПЬЮТЕРНЫХ ТЕХНОЛОГИЙ}{}
+\setstartdate{22.07}{}
+\setenddate{03.08}{}
+
+\addbibresource{references.bib}
+
+\newcommand{\macro}[2]{\texttt{\textbackslash#1\{#2\}}}
+
+\newfontfamily\cyrillicfont[Ligatures=TeX]{Times New Roman}
+
+\newif\ifpractice
+\practicetrue
+
+\begin{document}
+\ifpractice
+    \maketitle{practice}
+    \tableofcontents
+    \newpage
+    \section{Введение}
+    \subfile{subfiles/1-introduction.tex}
+    \newpage
+    \section{Основная часть}
+    \subfile{subfiles/2-project.tex}
+    \newpage
+    \section*{Заключение}
+    \subfile{subfiles/3-conclusion.tex}
+    \newpage
+    \section*{Список литературы и используемых источников}
+    \subfile{subfiles/4-literature.tex}
+    \newpage
+    % \section*{Приложения}
+    % \subfile{subfiles/5-images.tex}
+    % \newpage
+    \subfile{subfiles/diary.tex}
+\else
+    \maketitle{thesis}
+    \makethesistitlebackside
+\fi
+\end{document}
