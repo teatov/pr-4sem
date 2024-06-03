@@ -6,8 +6,9 @@
 \usepackage{dirtree}
 \usepackage{multirow}
 \usepackage{graphicx}
+\usepackage{pdfpages}
 
-\graphicspath{ {./images/} }
+\graphicspath{ {./images} }
 
 \renewcommand{\listingscaption}{Код программы}
 
@@ -18,7 +19,7 @@
 \setgroup{Б9122-09.03.03пикд}
 \setsupervisor{Скурский Степан Андреевич}{ассистент}
 \setschooltitle{ИНСТИТУТ}{}
-\setschool{МАТЕМАТИКИКИ И КОМПЬЮТЕРНЫХ ТЕХНОЛОГИЙ}{}
+\setschool{МАТЕМАТИКИКИ И КОМПЬЮТЕРНЫХ ТЕХНОЛОГИЙ }{}
 \setstartdate{22.07}{}
 \setenddate{03.08}{}
 
@@ -33,7 +34,8 @@
 
 \begin{document}
 \ifpractice
-    \maketitle{practice}
+    % \maketitle{practice}
+    \includepdf[pages=-]{Образец_титульного_листа.pdf}
     \tableofcontents
     \newpage
     \section{Введение}
@@ -48,10 +50,11 @@
     \section*{Список литературы и используемых источников}
     \subfile{subfiles/4-literature.tex}
     \newpage
-    % \section*{Приложения}
-    % \subfile{subfiles/5-images.tex}
-    % \newpage
-    \subfile{subfiles/diary.tex}
+    \section*{Приложения}
+    \subfile{subfiles/5-images.tex}
+    \newpage
+    % \subfile{subfiles/diary.tex}
+    \includepdf[pages=-]{Дневник.pdf}
 \else
     \maketitle{thesis}
     \makethesistitlebackside
