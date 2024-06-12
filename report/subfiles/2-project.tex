@@ -25,10 +25,105 @@
 \begin{enumerate}
   \item Предварительная обработка изображений.
 \par На этом этапе считывается весь набор данных, состоящий из 1040 изображений в формате PNG. Устанавливается размер партии для обучения и валидации, равный 16, размер субдескритизации, равный 4, и максимальная длина строки с ответом на Captcha, равная 5.
+\begin{minted}[fontsize=\footnotesize,breaklines]{python}
+# Путь к папке с данными
+data_dir = Path("./captcha_images_v2/")
+
+# Список всех картинок
+images = sorted(list(map(str, list(data_dir.glob("*.png")))))
+labels = [img.split(os.path.sep)[-1].split(".png")[0] for img in images]
+characters = set(char for label in labels for char in label)
+characters = sorted(list(characters))
+
+print("Картинок найдено: ", len(images))
+print("Слов найдено: ", len(labels))
+print("Уникальных символов: ", len(characters))
+print("Имеющиеся символы: ", characters)
+
+# Размер партии для обучения и валидации
+batch_size = 16
+
+# Требуемый размер изображений
+img_width = 200
+img_height = 50
+
+# Во сколько раз изображение будет уменьшено.
+# У нас будет 2 свёрточных блока,
+# у каждого блока будет слой пулинга, который субдескритизирует
+# изображение в 2 раза, поэтому итоговый коэффициент будет 4.
+downsample_factor = 4
+
+# Максимальная возможная длина капчи
+max_length = max([len(label) for label in labels])
+\end{minted}
 \par Затем создаются функции для сопоставления символов индексам и наоборот. Это распространённая практика в сфере обработки текстов, чтобы было проще работать с данными в виде чисел.
+\begin{minted}[fontsize=\footnotesize,breaklines]{python}
+# Сопоставление символов к числам
+char_to_num = tf.keras.layers.StringLookup(vocabulary=list(characters), mask_token=None)
+
+# Сопоставление чисел обратно к символам
+num_to_char = tf.keras.layers.StringLookup(
+    vocabulary=char_to_num.get_vocabulary(), mask_token=None, invert=True
+)
+\end{minted}
 \par После этого создаются два набора данных - для обучения модели и для валидации результатов. Считанные изображения перемешиваются и распределяются поровну в два набора.
+\begin{minted}[fontsize=\footnotesize,breaklines]{python}
+def split_data(images, labels, train_size=0.8, test_size=0.1, shuffle=True):
+    # 1. Берём количество всех картинок
+    size = len(images)
+    # 2. Делаем массив индексов и, если надо, перемешиваем его
+    indices = tf.keras.ops.arange(size)
+    if shuffle:
+        tf.keras.random.shuffle(indices)
+    # 3. Берём размер тренировочной выборки
+    train_samples = int(size * train_size)
+    test_samples = train_samples + int(size * test_size) + 2
+    print(train_samples, test_samples)
+    # 4. Разделяем данные в наборы для обучения и валидации
+    x_train, y_train = images[indices[:train_samples]], labels[indices[:train_samples]]
+    x_valid, y_valid = images[indices[train_samples:test_samples]], labels[indices[train_samples:test_samples]]
+    x_test, y_test = images[indices[test_samples:]], labels[indices[test_samples:]]
+    return x_train, x_valid, y_train, y_valid, x_test, y_test
+
+
+x_train, x_valid, y_train, y_valid, x_test, y_test = split_data(np.array(images), np.array(labels))
+print(len(x_train), len(x_valid), len(y_train), len(y_valid), len(x_test), len(y_test))
+\end{minted}
 \par Далее создаётся функция непосредственно считывания изображения и приведения его в формат, удобный для нейронной сети. Изображение конвертируется в монохромный формат, превращается в матрицу со значениями от 0 до 1, и транспонируется, чтобы модель считывала изображения вдоль ширины, слева направо, вместо того чтобы считывать всё изображение разом.
+\begin{minted}[fontsize=\footnotesize,breaklines]{python}
+def encode_single_sample(img_path, label):
+    # 1. Считываем изображение
+    img = tf.io.read_file(img_path)
+    # 2. Декодируем и конвертируем в монохром
+    img = tf.io.decode_png(img, channels=1)
+    # 3. Конвертируем в дробь от 0 до 1
+    img = tf.image.convert_image_dtype(img, tf.float32)
+    # 4. Изменяем размер изображений под требуемый
+    img = tf.keras.ops.image.resize(img, [img_height, img_width])
+    # 5. Транспонируем изображение, чтобы ось времени
+    # соответствовала ширине изображения
+    img = tf.keras.ops.transpose(img, axes=[1, 0, 2])
+    # 6. Сопоставляем символы к числам
+    label = char_to_num(tf.strings.unicode_split(label, input_encoding="UTF-8"))
+    # 7. Возвращаем словарь с двумя вводными данными для модели
+    return {"image": img, "label": label}
+\end{minted}
 \par Затем создаются два объекта наборов данных TensorFlow из тех наборов данных, которые были приготовлены ранее.
+\begin{minted}[fontsize=\footnotesize,breaklines]{python}
+train_dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+train_dataset = (
+    train_dataset.map(encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE)
+    .batch(batch_size)
+    .prefetch(buffer_size=tf.data.AUTOTUNE)
+)
+
+validation_dataset = tf.data.Dataset.from_tensor_slices((x_valid, y_valid))
+validation_dataset = (
+    validation_dataset.map(encode_single_sample, num_parallel_calls=tf.data.AUTOTUNE)
+    .batch(batch_size)
+    .prefetch(buffer_size=tf.data.AUTOTUNE)
+)
+\end{minted}
 \item Создание модели
 \par Сперва создаётся слой вводных данных, содержащий изображения Captcha и текст ответов на них.
 \par Затем добавляются два двухмерных свёрточных слоя, с количеством выходных фильтров, равных 32, размером свёрточного окна 2 на 2, с линейным выпрямителем (Rectified linear unit, ReLU) в качестве функции активации и инициализатором хи-нормаль.
@@ -36,6 +131,65 @@
 \par После этого добавляются два двунаправленных рекуррентных слоя, использующих архитектуру долгой краткосрочной памяти (Long short-term memory, LSTM). Они проходят по изображению слева направо, используя ширину в качестве единицы времени.
 \par Затем добавляется полносвязный слой для агрегации выходных данных рекурретных слоёв.
 \par Далее добавляется слой CTC, оценивающий потерю.
+\begin{minted}[fontsize=\footnotesize,breaklines]{python}
+def build_model():
+    # Ввод данных в модель
+    input_img = tf.keras.layers.Input(
+        shape=(img_width, img_height, 1), name="image", dtype="float32"
+    )
+    labels = tf.keras.layers.Input(name="label", shape=(None,), dtype="float32")
+
+    # Первый свёрточный слой
+    x = tf.keras.layers.Conv2D(
+        32,
+        (3, 3),
+        activation="relu",
+        kernel_initializer="he_normal",
+        padding="same",
+        name="Conv1",
+    )(input_img)
+    x = tf.keras.layers.MaxPooling2D((2, 2), name="pool1")(x)
+
+    # Второй свёрточный слой
+    x = tf.keras.layers.Conv2D(
+        64,
+        (3, 3),
+        activation="relu",
+        kernel_initializer="he_normal",
+        padding="same",
+        name="Conv2",
+    )(x)
+    x = tf.keras.layers.MaxPooling2D((2, 2), name="pool2")(x)
+
+    # Пулинг с размером фильтра и шага 2, с функцией максимума.
+    # В итоге, изображение будет в 4 раза меньше.
+    new_shape = ((img_width // 4), (img_height // 4) * 64)
+    x = tf.keras.layers.Reshape(target_shape=new_shape, name="reshape")(x)
+    x = tf.keras.layers.Dense(64, activation="relu", name="dense1")(x)
+    x = tf.keras.layers.Dropout(0.2)(x)
+
+    # Рекуррентные слои
+    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, dropout=0.25))(x)
+    x = tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64, return_sequences=True, dropout=0.25))(x)
+
+    # Слой вывода
+    x = tf.keras.layers.Dense(
+        len(char_to_num.get_vocabulary()) + 1, activation="softmax", name="dense2"
+    )(x)
+
+    # Слой классификации по рейтингу, для вычисления потерь при каждом шаге
+    output = CTCLayer(name="ctc_loss")(labels, x)
+
+    # Задаём модель
+    model = tf.keras.models.Model(
+        inputs=[input_img, labels], outputs=output, name="ocr_model_v1"
+    )
+    # Оптимизатор
+    opt = tf.keras.optimizers.Adam()
+    # Компилируем модель
+    model.compile(optimizer=opt)
+    return model
+\end{minted}
 \item Обучение модели
 \par Обучение происходило в 100 этапов, с использованием тренировочного и валидационного наборов, подготовленных ранее. На первых этапах потери были высокими, но постепенно стали близки к нулю, говоря о хороших результатах обучения.
 \\
@@ -46,7 +200,20 @@
 \end{figure}
 \item Вывод данных
 \par Последним этапом было создание функции для расшифровки выходных данных модели и преобразования их в текст, с помощью которого можно будет самостоятельно проверить, насколько хорошо модель справляется с определением текста на заданном изображении.
-\\
+\begin{minted}[fontsize=\footnotesize,breaklines]{python}
+# Расшифровка прогноза
+def decode_batch_predictions(pred):
+    input_len = np.ones(pred.shape[0]) * pred.shape[1]
+    results = ctc_decode(pred, input_length=input_len, greedy=True)[0][0][
+        :, :max_length
+    ]
+    # Пробегаемся по результатам и возвращаем текст
+    output_text = []
+    for res in results:
+        res = tf.strings.reduce_join(num_to_char(res)).numpy().decode("utf-8")
+        output_text.append(res)
+    return output_text
+\end{minted}
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{results.png}
